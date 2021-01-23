@@ -61,7 +61,7 @@ public class Main extends JavaPlugin implements Listener {
             case BEETROOTS:
             case CARROTS:
             case POTATOES:
-                // I think some mods might delete the block below, for whatever reason. Check it, just in case.
+                // I worry some mods might delete the block below, for whatever reason. Check it, just in case.
                 if (block.getLocation().subtract(0d, 1d, 0d).getBlock().getType() != Material.FARMLAND) {return;}
                 break;
             case NETHER_WART:
