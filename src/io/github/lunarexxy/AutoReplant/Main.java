@@ -20,8 +20,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 //
 // Pumpkins are broken and dropped as carved pumpkins when sheared by a player, for people who make lots of jack-o-lanterns.
 // Replant cocoa beans - the only difference is they sit next to a few different jungle wood types instead of on top of farmland.
-// Sugarcane? Just gotta leave the base block standing while breaking the sugarcane block above it.
-// Enchantment support, maybe? Dunno how hard it would be.
+// Enchantment support, maybe? Assuming Fortune works automatically, only Unbreaking needs to be supported. ( (100/EnchantLevel+1)% chance of durability decrease )
 
 public class Main extends JavaPlugin implements Listener {
 
@@ -53,40 +52,70 @@ public class Main extends JavaPlugin implements Listener {
         if (!isHoeMaterial(heldItem.getType())) {return;}
 
         // Is the crop fully grown?
+        // Sugarcane is a special case that uses age for growing new blocks instead, so it bypasses this check.
         if (!(blockData instanceof Ageable)) {return;}
-        else if (((Ageable) blockData).getAge() != ((Ageable) blockData).getMaximumAge()) {return;}
+        else if (((Ageable) blockData).getAge() != ((Ageable) blockData).getMaximumAge() &&
+                 blockState.getType() != Material.SUGAR_CANE) {return;}
 
+        boolean skipReplant = false;
+        boolean skipDamage = false;
         switch (blockState.getType()) {
             case WHEAT:
             case BEETROOTS:
             case CARROTS:
             case POTATOES:
                 // I worry some mods might delete the block below, for whatever reason. Check it, just in case.
-                if (block.getLocation().subtract(0d, 1d, 0d).getBlock().getType() != Material.FARMLAND) {return;}
+                if (block.getRelative(0,-1,0).getType() != Material.FARMLAND) {return;}
                 break;
             case NETHER_WART:
-                if (block.getLocation().subtract(0d, 1d, 0d).getBlock().getType() != Material.SOUL_SAND) {return;}
+                if (block.getRelative(0,-1,0).getType() != Material.SOUL_SAND) {return;}
+                break;
+            case SUGAR_CANE:
+                // Fail if this is the lowest sugarcane block and there's no sugarcane above.
+                if (block.getRelative(0,-1,0).getType() != Material.SUGAR_CANE &&
+                    block.getRelative(0,1,0).getType() != Material.SUGAR_CANE) {return;}
+
+                // Find the second-lowest block of the sugarcane.
+                int yOffset = -1;
+                while (block.getRelative(0,yOffset,0).getType() == Material.SUGAR_CANE) {
+                    // Fail if void is reached somehow. Mostly just acts as infinite loop protection, and in case the void is turned into sugar canes by some weird mod.
+                    if (block.getRelative(0,yOffset,0).getLocation().getBlockY() <= 0) {return;}
+                    yOffset--;
+                }
+                // Break the second-lowest block. Sugarcane thus doesn't need replanting, so that step is skipped.
+                block.getRelative(0, yOffset+2,0).breakNaturally(heldItem);
+                skipReplant = true; // No replanting needed, since we didn't break the base block
+                skipDamage = true; // The only improvement from supporting sugarcane is that the player doesn't have to aim at the second-lowest block anymore. Not worth the damage.
                 break;
             default:
                 // Fail if crop is not supported.
                 return;
         }
-        block.breakNaturally(heldItem);  // Break the crop with the player's tool
-        ((Ageable) blockData).setAge(0); // Zero the age of the crop to replant
-        block.setBlockData(blockData);   // "Plant" the new crop
-        
-        // If the player is a god, leave their tool alone.
-        if (event.getPlayer().getGameMode() == GameMode.CREATIVE ||
-            event.getPlayer().getGameMode() == GameMode.SPECTATOR) {return;}
 
-        // Damage the player's tool, if allowed. (and if it exists; 'instanceof' also handles null checking)
-        if (heldItemMeta instanceof Damageable && !heldItemMeta.isUnbreakable()) {
-            int dmg = ((Damageable) heldItemMeta).getDamage() + 1;
-            ((Damageable) heldItemMeta).setDamage(dmg);
-            heldItem.setItemMeta(heldItemMeta);
+        // Breaks, resets, and replants the crop
+        if (!skipReplant) {
+            block.breakNaturally(heldItem);
+            ((Ageable) blockData).setAge(0);
+            block.setBlockData(blockData);
+        }
 
-            // Break if durability is exceeded.
-            if (shouldHoeBreak(heldItem.getType(), dmg)) { heldItem.setAmount(0); }
+        // Damages the tool used for auto-replanting.
+        if (!skipDamage) {
+            // If the player is a god, don't damage their tool.
+            if (event.getPlayer().getGameMode() == GameMode.CREATIVE ||
+                event.getPlayer().getGameMode() == GameMode.SPECTATOR) {return;}
+
+            // Damage the player's tool, if allowed. (and if it exists; 'instanceof' also handles null checking)
+            if (heldItemMeta instanceof Damageable && !heldItemMeta.isUnbreakable()) {
+                int dmg = ((Damageable) heldItemMeta).getDamage() + 1;
+                ((Damageable) heldItemMeta).setDamage(dmg);
+                heldItem.setItemMeta(heldItemMeta);
+
+                // Break if durability is exceeded.
+                if (shouldHoeBreak(heldItem.getType(), dmg)) {
+                    heldItem.setAmount(0);
+                }
+            }
         }
 
         
