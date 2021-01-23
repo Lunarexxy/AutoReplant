@@ -9,7 +9,7 @@
  
  ## How to install
  
- Like any other Bukkit plugins, download a copy of the AutoReplant.jar file and place it inside your server's plugins/ directory.
+ Like any other Bukkit plugin, download a copy of the AutoReplant.jar file and place it inside your server's plugins/ directory.
  
  ## Older versions
  
