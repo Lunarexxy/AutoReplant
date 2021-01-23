@@ -9,7 +9,6 @@ import org.bukkit.block.data.BlockData;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
-import org.bukkit.event.enchantment.EnchantItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
@@ -33,13 +32,6 @@ public class Main extends JavaPlugin implements Listener {
     @Override
     public void onDisable() {
 
-    }
-
-    @EventHandler
-    public void onEnchantItemEvent(EnchantItemEvent event) {
-        if (isHoeMaterial(event.getItem().getType())) {
-            event.getEnchanter().sendMessage("[AutoReplant] Note: Hoe enchantments are ignored when auto-replanting.");
-        }
     }
 
     @EventHandler
@@ -71,22 +63,17 @@ public class Main extends JavaPlugin implements Listener {
             case POTATOES:
                 // I think some mods might delete the block below, for whatever reason. Check it, just in case.
                 if (block.getLocation().subtract(0d, 1d, 0d).getBlock().getType() != Material.FARMLAND) {return;}
-
-                block.breakNaturally();          // Break the crop
-                ((Ageable) blockData).setAge(0); // Zero the age of the crop to replant
-                block.setBlockData(blockData);   // "Plant" the new crop
                 break;
             case NETHER_WART:
                 if (block.getLocation().subtract(0d, 1d, 0d).getBlock().getType() != Material.SOUL_SAND) {return;}
-
-                block.breakNaturally();          // Break the crop
-                ((Ageable) blockData).setAge(0); // Zero the age of the crop to replant
-                block.setBlockData(blockData);   // "Plant" the new crop
                 break;
-            case COCOA:
-                //TODO
-                break;
+            default:
+                // Fail if crop is not supported.
+                return;
         }
+        block.breakNaturally(heldItem);  // Break the crop with the player's tool
+        ((Ageable) blockData).setAge(0); // Zero the age of the crop to replant
+        block.setBlockData(blockData);   // "Plant" the new crop
         
         // If the player is a god, leave their tool alone.
         if (event.getPlayer().getGameMode() == GameMode.CREATIVE ||
