@@ -15,10 +15,10 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitRunnable;
 
 // Things that could be nice that I haven't bothered doing:
 //
-// Pumpkins are broken and dropped as carved pumpkins when sheared by a player, for people who make lots of jack-o-lanterns.
 // Replant cocoa beans - the only difference is they sit next to a few different jungle wood types instead of on top of farmland.
 // Enchantment support, maybe? Assuming Fortune works automatically, only Unbreaking needs to be supported. ( (100/EnchantLevel+1)% chance of durability decrease )
 
@@ -39,35 +39,36 @@ public class Main extends JavaPlugin implements Listener {
         if (block == null) {return;} // Can't replant what doesn't exist.
         BlockState blockState = block.getState();
         BlockData blockData = blockState.getBlockData();
+        Material blockType = blockState.getType();
         ItemStack heldItem = event.getPlayer().getInventory().getItemInMainHand();
         ItemMeta heldItemMeta = heldItem.getItemMeta();
 
-        // Is this the main hand event? (cuz apparently there's one for the off-hand that fires simultaneously)
-        if (event.getHand() != EquipmentSlot.HAND) {return;}
+        // Is this the right-click main hand event? (cuz apparently there's one for the off-hand that fires simultaneously)
+        if (event.getHand() != EquipmentSlot.HAND || event.getAction() != Action.RIGHT_CLICK_BLOCK) {return;}
 
-        // Is player right clicking?
-        if (event.getAction() != Action.RIGHT_CLICK_BLOCK) {return;}
-
-        // Is player using a hoe?
-        if (!isHoeMaterial(heldItem.getType())) {return;}
+        // Is player using a hoe/shears?
+        if (!isSupportedTool(heldItem.getType())) {return;}
 
         // Is the crop fully grown?
-        // Sugarcane is a special case that uses age for growing new blocks instead, so it bypasses this check.
-        if (!(blockData instanceof Ageable)) {return;}
-        else if (((Ageable) blockData).getAge() != ((Ageable) blockData).getMaximumAge() &&
-                 blockState.getType() != Material.SUGAR_CANE) {return;}
+        // (Sugarcane is a special case that uses age for growing new blocks instead, and Pumpkin is not Ageable, so they bypass this check.)
+        if (blockType != Material.SUGAR_CANE && blockType != Material.PUMPKIN) {
+            if (!(blockData instanceof Ageable)) {return;}
+            else if (((Ageable) blockData).getAge() != ((Ageable) blockData).getMaximumAge()) {return;}
+        }
 
         boolean skipReplant = false;
         boolean skipDamage = false;
-        switch (blockState.getType()) {
+        switch (blockType) {
             case WHEAT:
             case BEETROOTS:
             case CARROTS:
             case POTATOES:
+                if (!isHoe(heldItem.getType())) {return;}
                 // I worry some mods might delete the block below, for whatever reason. Check it, just in case.
                 if (block.getRelative(0,-1,0).getType() != Material.FARMLAND) {return;}
                 break;
             case NETHER_WART:
+                if (!isHoe(heldItem.getType())) {return;}
                 if (block.getRelative(0,-1,0).getType() != Material.SOUL_SAND) {return;}
                 break;
             case SUGAR_CANE:
@@ -86,6 +87,18 @@ public class Main extends JavaPlugin implements Listener {
                 block.getRelative(0, yOffset+2,0).breakNaturally(heldItem);
                 skipReplant = true; // No replanting needed, since we didn't break the base block
                 skipDamage = true; // The only improvement from supporting sugarcane is that the player doesn't have to aim at the second-lowest block anymore. Not worth the damage.
+                break; // Could just return here, but I find it easier to read this way.
+            case PUMPKIN:
+                if (heldItem.getType() != Material.SHEARS) {return;}
+                // Minecraft already turns this into a carved pumpkin. We just have to wait a tick to break it.
+                new BukkitRunnable() {
+                    @Override
+                    public void run() {
+                        if (block.getType() == Material.CARVED_PUMPKIN) {block.breakNaturally(heldItem);}
+                    }
+                }.runTaskLater(this, 1);
+                skipReplant = true;
+                skipDamage = true; // Minecraft does the damage, for once.
                 break;
             default:
                 // Fail if crop is not supported.
@@ -121,7 +134,11 @@ public class Main extends JavaPlugin implements Listener {
         
     }
 
-    private boolean isHoeMaterial(Material material) {
+    private boolean isSupportedTool(Material material) {
+        return (material == Material.SHEARS || isHoe(material));
+    }
+
+    private boolean isHoe(Material material) {
         return (material == Material.WOODEN_HOE ||
                 material == Material.STONE_HOE ||
                 material == Material.IRON_HOE ||
